@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getAccessToken } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -26,10 +27,9 @@ export function AIProviderSelector({ className }: AIProviderSelectorProps) {
   }>({ gemini: false, groq: false });
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    fetch('/api/ai-providers', {
+    getAccessToken().then(token => fetch('/api/ai-providers', {
       headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-    })
+    }))
       .then(res => res.json())
       .then(data => {
         setAvailableProviders(data.providers);

@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { getAccessToken } from "./supabase";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: string) {
@@ -7,14 +8,14 @@ export class ApiError extends Error {
   }
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem("access_token");
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const token = await getAccessToken();
   const headers: HeadersInit = {};
-  
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  
+
   return headers;
 }
 
@@ -33,7 +34,7 @@ export async function apiRequest(
   const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
   
   const headers: HeadersInit = {
-    ...getAuthHeaders(),
+    ...(await getAuthHeaders()),
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
   
@@ -58,7 +59,7 @@ export const getQueryFn: <T>(options: {
   const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
     
     const res = await fetch(fullUrl, {
-      headers: getAuthHeaders(),
+      headers: await getAuthHeaders(),
       credentials: "include",
     });
 

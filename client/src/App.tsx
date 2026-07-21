@@ -75,7 +75,7 @@ function App() {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event: AuthChangeEvent, session: Session | null) => {
-            if (event === 'SIGNED_IN' && session) {
+            if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) {
               const username = session.user.user_metadata?.username || 
                               session.user.email?.split('@')[0] || 
                               'user';

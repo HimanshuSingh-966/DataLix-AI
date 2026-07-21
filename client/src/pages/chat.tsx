@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { queryClient, apiRequest, ApiError } from '@/lib/queryClient';
+import { getAccessToken } from '@/lib/supabase';
 import { Header } from '@/components/Header';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { MessageBubble } from '@/components/MessageBubble';
@@ -86,7 +87,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -163,7 +164,7 @@ export default function ChatPage() {
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         },
         body: formData
       });
@@ -221,7 +222,7 @@ export default function ChatPage() {
     try {
       const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         }
       });
 
