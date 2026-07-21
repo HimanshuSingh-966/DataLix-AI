@@ -14,7 +14,10 @@ export function ChartDisplay({ chartData, title }: ChartDisplayProps) {
   useEffect(() => {
     if (!plotRef.current) return;
 
-    // Dynamically import Plotly to avoid SSR issues
+    const computedStyle = getComputedStyle(document.documentElement);
+    const foregroundHSL = computedStyle.getPropertyValue('--foreground').trim();
+    const fontColor = `hsl(${foregroundHSL})`;
+
     import('plotly.js-dist-min').then((Plotly) => {
       if (plotRef.current) {
         Plotly.newPlot(
@@ -28,7 +31,7 @@ export function ChartDisplay({ chartData, title }: ChartDisplayProps) {
             plot_bgcolor: 'rgba(0,0,0,0)',
             font: {
               family: 'Inter, sans-serif',
-              color: 'hsl(var(--foreground))',
+              color: fontColor,
             },
           },
           {

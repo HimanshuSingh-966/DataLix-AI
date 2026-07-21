@@ -1,59 +1,53 @@
 from fastapi import APIRouter, HTTPException, Header, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, Dict
 import os
 import uuid
 import secrets
+import hashlib
+import time
+import logging
 from passlib.context import CryptContext
 
 router = APIRouter()
 
-# Password hashing
+logger = logging.getLogger("datalix.auth")
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# In-memory user storage (simple implementation)
-users_db: Dict[str, Dict] = {}
-sessions_db: Dict[str, str] = {}
+FALLBACK_USERS: Dict[str, Dict] = {}
+FALLBACK_SESSIONS: Dict[str, Dict] = {}
+SESSION_TTL = 86400
 
-# Try to use Supabase if configured
 supabase_url = os.getenv("SUPABASE_URL", "")
 supabase_key = os.getenv("SUPABASE_ANON_KEY", "")
 supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-# Enable Supabase auth if all credentials are available
 USE_SUPABASE = bool(supabase_url and supabase_key and supabase_service_key)
 
 if USE_SUPABASE:
     try:
         from supabase import create_client, Client
-        # Create client with anon key for auth operations (signup/signin)
         supabase: Optional[Client] = create_client(
             supabase_url=supabase_url,
             supabase_key=supabase_key
         )
-        # Create admin client with service role for admin operations (token verification)
         supabase_admin: Optional[Client] = create_client(
             supabase_url=supabase_url,
             supabase_key=supabase_service_key
         )
-        print("✓ Supabase authentication enabled")
+        logger.info("Supabase authentication enabled")
     except Exception as e:
-        print(f"⚠️  Supabase initialization failed: {e}")
-        USE_SUPABASE = False
-        supabase = None
-        supabase_admin = None
-        print("→ Using in-memory authentication")
+        logger.error(f"Supabase initialization failed: {e}")
+        raise RuntimeError("Supabase initialization failed") from e
 else:
-    print("⚠️  Supabase not configured. Using in-memory authentication")
-    supabase = None
-    supabase_admin = None
+    logger.warning("Supabase not configured. Using fallback in-memory authentication.")
 
-# Request models
+
 class SignUpRequest(BaseModel):
     email: EmailStr
-    password: str
-    username: str
+    password: str = Field(min_length=8, max_length=72)
+    username: str = Field(min_length=2, max_length=32, pattern=r'^[a-zA-Z0-9_.-]+$')
 
 class SignInRequest(BaseModel):
     email: EmailStr
@@ -64,20 +58,18 @@ class AuthResponse(BaseModel):
     session: Dict
     access_token: str
 
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
+
 @router.post("/signup", response_model=AuthResponse)
 async def signup(request: SignUpRequest):
-    """Register a new user"""
-    
     if USE_SUPABASE and supabase:
         try:
-            # Create user in Supabase Auth
-            # Note: Email confirmation is required by default in Supabase settings
             response = supabase.auth.sign_up({
                 "email": request.email,
                 "password": request.password,
@@ -87,28 +79,20 @@ async def signup(request: SignUpRequest):
                     }
                 }
             })
-            
+
             if response.user is None:
                 raise HTTPException(status_code=400, detail="Signup failed - user not created")
-            
-            # Note: User profile is automatically created in the 'profiles' table
-            # via database trigger (handle_new_user) when auth.users entry is created
-            print(f"✓ User created via Supabase Auth: {response.user.email}")
-            
-            # Check if session exists (it might be None if email confirmation is required)
+
+            logger.info("User created via Supabase Auth")
+
             if response.session is None:
-                # Email confirmation required - create a temporary token for the user
-                # Store user info with 'supabase:' prefix to distinguish from in-memory users
                 access_token = secrets.token_urlsafe(32)
-                sessions_db[access_token] = f"supabase:{response.user.id}"
-                
-                # Store basic user info for token validation
-                users_db[f"supabase:{response.user.id}"] = {
+                FALLBACK_SESSIONS[access_token] = {"user_id": f"supabase:{response.user.id}", "created_at": time.time()}
+                FALLBACK_USERS[f"supabase:{response.user.id}"] = {
                     "id": response.user.id,
                     "email": response.user.email,
                     "username": request.username
                 }
-                
                 return {
                     "user": {
                         "id": response.user.id,
@@ -121,7 +105,7 @@ async def signup(request: SignUpRequest):
                     },
                     "access_token": access_token
                 }
-            
+
             return {
                 "user": {
                     "id": response.user.id,
@@ -134,26 +118,34 @@ async def signup(request: SignUpRequest):
                 },
                 "access_token": response.session.access_token
             }
+        except HTTPException:
+            raise
         except Exception as e:
-            print(f"Supabase signup error: {str(e)}")
-            raise HTTPException(status_code=400, detail=str(e))
+            error_msg = getattr(e, 'message', str(e))
+            logger.error("Supabase signup failed: %s - %s", type(e).__name__, error_msg)
+            indicator = str(error_msg).lower()
+            # Map known cases to safe messages; never echo raw provider errors
+            if "already" in indicator and ("registered" in indicator or "exists" in indicator):
+                raise HTTPException(status_code=400, detail="An account with this email already exists")
+            if "password" in indicator:
+                raise HTTPException(status_code=400, detail="Password does not meet requirements")
+            raise HTTPException(status_code=400, detail="Signup failed. Please try again later.")
     else:
-        # In-memory auth
-        if request.email in users_db:
+        if request.email in FALLBACK_USERS:
             raise HTTPException(status_code=400, detail="User already exists")
-        
+
         user_id = str(uuid.uuid4())
         access_token = secrets.token_urlsafe(32)
-        
-        users_db[request.email] = {
+
+        FALLBACK_USERS[request.email] = {
             "id": user_id,
             "email": request.email,
             "username": request.username,
             "password": hash_password(request.password)
         }
-        
-        sessions_db[access_token] = user_id
-        
+
+        FALLBACK_SESSIONS[access_token] = {"user_id": user_id, "created_at": time.time()}
+
         return {
             "user": {
                 "id": user_id,
@@ -167,96 +159,97 @@ async def signup(request: SignUpRequest):
             "access_token": access_token
         }
 
+
 @router.post("/signin", response_model=AuthResponse)
 async def signin(request: SignInRequest):
-    """Sign in a user"""
-    
-    if USE_SUPABASE and supabase:
-        try:
-            response = supabase.auth.sign_in_with_password({
-                "email": request.email,
-                "password": request.password
-            })
-            
-            if response.user is None:
-                raise HTTPException(status_code=401, detail="Invalid credentials")
-            
-            if response.session is None:
-                raise HTTPException(status_code=401, detail="Session not created")
-            
-            username = response.user.user_metadata.get('username', response.user.email.split('@')[0] if response.user.email else 'user')
-            
-            return {
-                "user": {
-                    "id": response.user.id,
-                    "email": response.user.email,
-                    "username": username
-                },
-                "session": {
-                    "access_token": response.session.access_token,
-                    "refresh_token": response.session.refresh_token
-                },
-                "access_token": response.session.access_token
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "email not confirmed" in error_msg or "email_not_confirmed" in error_msg:
-                raise HTTPException(
-                    status_code=401, 
-                    detail="Email not confirmed. Please check your email inbox and click the confirmation link before signing in."
-                )
-            raise HTTPException(status_code=401, detail=str(e))
-    else:
-        # In-memory auth
-        if request.email not in users_db:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-        user = users_db[request.email]
-        if not verify_password(request.password, user["password"]):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-        access_token = secrets.token_urlsafe(32)
-        sessions_db[access_token] = user["id"]
-        
-        return {
-            "user": {
-                "id": user["id"],
-                "email": user["email"],
-                "username": user["username"]
-            },
-            "session": {
-                "access_token": access_token,
-                "refresh_token": access_token
-            },
-            "access_token": access_token
-        }
+  if USE_SUPABASE and supabase:
+    try:
+      response = supabase.auth.sign_in_with_password({
+        "email": request.email,
+        "password": request.password
+      })
+
+      if response.user is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+      if response.session is None:
+        raise HTTPException(status_code=401, detail="Session not created")
+
+      username = response.user.user_metadata.get('username', response.user.email.split('@')[0] if response.user.email else 'user')
+
+      return {
+        "user": {
+          "id": response.user.id,
+          "email": response.user.email,
+          "username": username
+        },
+        "session": {
+          "access_token": response.session.access_token,
+          "refresh_token": response.session.refresh_token
+        },
+        "access_token": response.session.access_token
+      }
+    except HTTPException:
+      raise
+    except Exception as e:
+      error_type = type(e).__name__.lower()
+      error_attr = getattr(e, 'message', '') or getattr(e, 'code', '') or ''
+      error_indicator = f"{error_type} {error_attr}".lower()
+      if "email" in error_indicator and "confirm" in error_indicator:
+        raise HTTPException(
+          status_code=401,
+          detail="Email not confirmed. Please check your email inbox and click the confirmation link before signing in."
+        )
+      raise HTTPException(status_code=401, detail="Invalid credentials")
+  else:
+    if request.email not in FALLBACK_USERS:
+      raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    user = FALLBACK_USERS[request.email]
+    if not verify_password(request.password, user["password"]):
+      raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = secrets.token_urlsafe(32)
+    FALLBACK_SESSIONS[access_token] = {"user_id": user["id"], "created_at": time.time()}
+
+    return {
+      "user": {
+        "id": user["id"],
+        "email": user["email"],
+        "username": user["username"]
+      },
+      "session": {
+        "access_token": access_token,
+        "refresh_token": access_token
+      },
+      "access_token": access_token
+    }
+
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict:
-    """Dependency to get current authenticated user"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     token = authorization.split(" ")[1]
-    
-    # First, check if this is a temporary token in our sessions database
-    if token in sessions_db:
-        user_key = sessions_db[token]
-        
-        # Check if this is a Supabase user (prefixed with 'supabase:')
-        if user_key.startswith("supabase:") and user_key in users_db:
-            user = users_db[user_key]
+
+    if token in FALLBACK_SESSIONS:
+        session_data = FALLBACK_SESSIONS[token]
+        if time.time() - session_data["created_at"] > SESSION_TTL:
+            del FALLBACK_SESSIONS[token]
+            raise HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+        user_key = session_data["user_id"]
+
+        if user_key.startswith("supabase:") and user_key in FALLBACK_USERS:
+            user = FALLBACK_USERS[user_key]
             return {
                 "id": user["id"],
                 "email": user["email"],
                 "username": user["username"],
                 "isMaster": user.get("isMaster", 0)
             }
-        
-        # Otherwise it's an in-memory auth user
-        user = next((u for u in users_db.values() if u["id"] == user_key), None)
-        
+
+        user = next((u for u in FALLBACK_USERS.values() if u["id"] == user_key), None)
+
         if user:
             return {
                 "id": user["id"],
@@ -264,27 +257,24 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict:
                 "username": user["username"],
                 "isMaster": user.get("isMaster", 0)
             }
-    
-    # If not a temporary token and using Supabase, validate as JWT token
+
     if USE_SUPABASE and supabase_admin:
         try:
-            # Use the admin client to verify the user token
             user_response = supabase_admin.auth.get_user(token)
-            
+
             if not user_response or not user_response.user:
                 raise HTTPException(status_code=401, detail="Invalid token")
-            
+
             username = user_response.user.user_metadata.get('username', user_response.user.email.split('@')[0] if user_response.user.email else 'user')
-            
-            # Fetch is_master from database (profiles table)
+
             is_master = 0
             try:
                 user_data = supabase_admin.table("profiles").select("is_master").eq("id", user_response.user.id).single().execute()
-                if user_data.data:
+                if isinstance(user_data.data, dict):
                     is_master = user_data.data.get("is_master", 0)
-            except Exception as e:
-                print(f"⚠️  Could not fetch is_master: {e}")
-            
+            except Exception:
+                pass
+
             return {
                 "id": user_response.user.id,
                 "email": user_response.user.email,
@@ -294,41 +284,39 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict:
         except HTTPException:
             raise
         except Exception as e:
-            print(f"❌ Auth error: {str(e)}")
-            raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
-    
-    # If we get here, token is invalid
+            logger.error("Auth verification failed: %s", type(e).__name__)
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
     raise HTTPException(status_code=401, detail="Invalid token")
+
 
 @router.get("/verify")
 async def verify_token(user: Dict = Depends(get_current_user)):
-    """Verify authentication token and return user info"""
     return user
+
 
 @router.post("/signout")
 async def signout(authorization: Optional[str] = Header(None)):
-    """Sign out a user"""
-    
     if USE_SUPABASE and supabase:
         try:
             if authorization and authorization.startswith("Bearer "):
                 supabase.auth.sign_out()
             return {"message": "Signed out successfully"}
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Signout failed")
     else:
-        # In-memory auth
         if authorization and authorization.startswith("Bearer "):
             token = authorization.split(" ")[1]
-            if token in sessions_db:
-                del sessions_db[token]
+            if token in FALLBACK_SESSIONS:
+                del FALLBACK_SESSIONS[token]
         return {"message": "Signed out successfully"}
 
+
 @router.get("/config")
-async def get_supabase_config():
-    """Return public Supabase configuration for frontend"""
+async def get_supabase_config(user: Dict = Depends(get_current_user)):
+    if not supabase_url or not supabase_key:
+        raise HTTPException(status_code=404, detail="Supabase not configured")
     return {
         "supabaseUrl": supabase_url,
         "supabaseAnonKey": supabase_key
     }
-

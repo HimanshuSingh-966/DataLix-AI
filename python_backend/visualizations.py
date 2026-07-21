@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -123,15 +124,16 @@ def create_visualization(
             title_x=0.5
         )
         
-        # Convert to Plotly JSON format
+        # Convert to Plotly JSON format (to_json converts numpy arrays to plain lists)
+        fig_json = json.loads(fig.to_json())
         return {
-            "data": fig.to_dict()['data'],
-            "layout": fig.to_dict()['layout'],
+            "data": fig_json['data'],
+            "layout": fig_json['layout'],
             "config": {"responsive": True, "displayModeBar": True}
         }
     
     except Exception as e:
-        raise ValueError(f"Failed to create visualization: {str(e)}")
+        raise ValueError("Failed to create visualization")
 
 def create_distribution_plot(df: pd.DataFrame, column: str) -> Dict[str, Any]:
     """Create distribution plot for a column"""
@@ -151,8 +153,9 @@ def create_distribution_plot(df: pd.DataFrame, column: str) -> Dict[str, Any]:
     
     fig.update_layout(template='plotly_white', font=dict(family='Inter, sans-serif'))
     
+    fig_json = json.loads(fig.to_json())
     return {
-        "data": fig.to_dict()['data'],
-        "layout": fig.to_dict()['layout'],
+        "data": fig_json['data'],
+        "layout": fig_json['layout'],
         "config": {"responsive": True}
     }

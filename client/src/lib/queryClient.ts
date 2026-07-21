@@ -1,7 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
-
 export class ApiError extends Error {
   constructor(public status: number, public body: string) {
     super(`${status}: ${body}`);
@@ -32,7 +30,7 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+  const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
   
   const headers: HeadersInit = {
     ...getAuthHeaders(),
@@ -57,7 +55,7 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const url = queryKey.join("/") as string;
-    const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+  const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
     
     const res = await fetch(fullUrl, {
       headers: getAuthHeaders(),

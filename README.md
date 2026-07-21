@@ -6,13 +6,14 @@
 
 **Transform Data into Insights Through Natural Conversation**
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/HimanshuSingh-966/DataLix-AI/releases)
+[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/HimanshuSingh-966/DataLix-AI/releases)
+[![Better Stack Badge](https://uptime.betterstack.com/status-badges/v1/monitor/2srpm.svg)](https://uptime.betterstack.com/?utm_source=status_badge)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
 [![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://datalix-ai.onrender.com)
 
-[🚀 Live Demo](https://datalix-ai.onrender.com) • [📖 Documentation](./DOCUMENTATION.md) • [🐛 Report Bug](https://github.com/HimanshuSingh-966/DataLix-AI/issues) • [✨ Request Feature](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
+[🚀 Live Demo](https://datalix-ai.onrender.com) • [📝 Changelog](./CHANGELOG.md) • [🐛 Report Bug](https://github.com/HimanshuSingh-966/DataLix-AI/issues) • [✨ Request Feature](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
 
 </div>
 
@@ -92,9 +93,24 @@ DataLix: *creates line chart* "Revenue has increased 23% quarter-over-quarter...
 **Features:**
 - 🧠 Context-aware conversations with memory
 - 🔄 Multi-turn dialogue support
-- 🤖 Dual AI provider support (Gemini & Groq)
+- 🤖 Dual AI provider support (Gemini & Groq) — both with **native tool calling**: the AI actually executes operations (remove columns, filter rows, clean data, build charts) instead of describing them
 - 💡 Intelligent suggested next actions
 - 🎯 Automatic query optimization
+
+### 🤖 Multi-Agent Analysis Pipeline
+One request — "analyze my data" — runs a full LangGraph pipeline of specialized subagents:
+
+```
+Ingestion → Diagnosis → Cleaning → Visualization → Insight
+```
+
+- 🔍 **Ingestion** profiles every column (types, cardinality, datetime detection)
+- 🩺 **Diagnosis** produces a data quality report with issues and a 0–100 score
+- 🧹 **Cleaning** fixes issues on a working copy with a full audit log
+- 📊 **Visualization** auto-selects and generates the most relevant charts
+- 💡 **Insight** writes an executive summary of findings
+
+Available via chat ("run a full analysis") or directly through `POST /analyze`.
 
 ### 📊 Automated Data Quality Scoring
 
@@ -235,31 +251,40 @@ VITE_SUPABASE_ANON_KEY=your-anon-key-here
 # ========================================
 # Server Configuration
 # ========================================
-NODE_ENV=development
-PORT=5000
-PYTHON_BACKEND_URL=http://localhost:8000
+NODE_ENV=development            # set to "production" in deployment (disables API docs + dev reload)
+PORT=8001                       # FastAPI backend port (Render sets this automatically)
+PYTHON_BACKEND_URL=http://localhost:8001   # used by the Vite dev proxy
+
+# ========================================
+# Security & Limits (optional — sensible defaults)
+# ========================================
+ALLOWED_ORIGINS=http://localhost:5000,http://localhost:3000
+MAX_UPLOAD_MB=50
+MAX_DATASET_ROWS=1000000
+MAX_DATASET_COLUMNS=500
 ```
 
 **Step 4: Initialize Database**
 
 1. Open your [Supabase SQL Editor](https://app.supabase.com)
-2. Run the script: `supabase_migrations/init_database_with_rls.sql`
+2. Run the script: `init_database_with_rls.sql` (repo root)
 3. Verify tables are created
 
 **Step 5: Launch Application**
 
 ```bash
-# Development mode (hot reload enabled)
-npm run dev
+# Terminal 1 — FastAPI backend (port 8001)
+npm run dev:python
 
-# Production mode
-npm run build
-npm start
+# Terminal 2 — React frontend with hot reload (port 5173)
+npm run dev
 ```
+
+The Vite dev server proxies `/api/*` to the backend automatically.
 
 **Step 6: Access Application**
 
-🎉 Open browser to: **http://localhost:5000**
+🎉 Open browser to: **http://localhost:5173**
 
 ### 🎯 First Steps
 
@@ -408,20 +433,21 @@ npm start
 │  └──────────┘  └──────────┘  └───────────────────┘    │
 └────────────────────┬────────────────────────────────────┘
                      │
-        ┌────────────┴────────────┐
-        │                         │
-┌───────▼──────┐         ┌────────▼─────────┐
-│    Express   │         │     FastAPI      │
-│   (Node.js)  │◄───────►│    (Python)      │
-│              │         │                  │
-│  - Auth      │         │  - Data Analysis │
-│  - Sessions  │         │  - AI Chat       │
-│  - Storage   │         │  - Visualizations│
-└──────┬───────┘         └────────┬─────────┘
-       │                          │
-       │         ┌────────────────┘
-       │         │
-┌──────▼─────────▼───────┐
+                     │  /api/* (Vercel rewrite / Vite proxy / nginx)
+                     │
+            ┌────────▼─────────┐
+            │     FastAPI      │
+            │    (Python)      │
+            │                  │
+            │  - Auth          │
+            │  - Sessions      │
+            │  - Data Analysis │
+            │  - AI Chat       │
+            │  - Agent Pipeline│
+            │  - Visualizations│
+            └────────┬─────────┘
+                     │
+┌────────────────────▼───┐
 │   Supabase (Postgres)  │
 │                        │
 │  - Users               │
@@ -429,6 +455,16 @@ npm start
 │  - Messages            │
 │  - Datasets (metadata) │
 └────────────────────────┘
+
+    ┌─────────────────────────┐
+    │     LangGraph Agents    │
+    │                         │
+    │  1. Ingestion Agent     │
+    │  2. Diagnosis Agent     │
+    │  3. Cleaning Agent      │
+    │  4. Visualization Agent │
+    │  5. Insight Agent       │
+    └─────────────────────────┘
 
     ┌─────────────┐
     │  AI Providers│
@@ -461,11 +497,10 @@ Zustand           // State management
 
 #### **Backend**
 ```typescript
-Node.js / Express // API server
-FastAPI           // Python service
+FastAPI           // Python API server
+LangGraph         // Multi-agent pipeline
 Supabase          // Database & Auth
 PostgreSQL        // Data storage
-Redis (optional)  // Caching
 ```
 
 </td>
@@ -476,8 +511,8 @@ Redis (optional)  // Caching
 #### **Data & AI**
 ```python
 pandas            # Data manipulation
-numpy             # Numerical ops
-scikit-learn      # ML features
+langgraph         # Multi-agent orchestration
+langchain         # LLM pipelines
 plotly            # Visualizations
 google-generativeai # Gemini
 groq              # Groq API
@@ -526,12 +561,6 @@ datalix-ai/
 │   ├── index.html
 │   └── vite.config.ts
 │
-├── 📁 server/                    # Express backend
-│   ├── routes.ts                 # API routes
-│   ├── storage.ts                # File storage
-│   ├── auth.ts                   # Authentication
-│   └── index.ts                  # Server entry
-│
 ├── 📁 python_backend/            # FastAPI service
 │   ├── main.py                   # FastAPI app
 │   ├── data_processor.py         # Data analysis engine
@@ -543,14 +572,9 @@ datalix-ai/
 ├── 📁 shared/                    # Shared TypeScript types
 │   └── schema.ts                 # Data models
 │
-├── 📁 supabase_migrations/       # Database schemas
-│   └── init_database_with_rls.sql
-│
-├── 📁 docs/                      # Documentation
-│   ├── DOCUMENTATION.md
-│   ├── RENDER_DEPLOYMENT.md
-│   └── API.md
-│
+├── init_database_with_rls.sql    # Database schema + RLS policies
+├── vercel.json                   # Vercel config (frontend + /api rewrite)
+├── CHANGELOG.md                  # Version history
 ├── .env.example                  # Environment template
 ├── package.json                  # Node dependencies
 ├── requirements.txt              # Python dependencies
@@ -563,56 +587,40 @@ datalix-ai/
 
 ## 🚀 Deployment
 
-### 🎯 Deploy to Render (Recommended)
+### 🎯 Recommended: Backend on Render + Frontend on Vercel
 
-**1. Prepare Your Repository**
-```bash
-git add .
-git commit -m "Ready for deployment"
-git push origin main
-```
+The FastAPI backend runs as a Render Web Service; the React app is served as a static site from Vercel. The included `vercel.json` rewrites `/api/*` calls to the Render backend, so requests stay same-origin in the browser — no client code changes and no CORS friction.
 
-**2. Create Render Services**
-
-<details>
-<summary><b>🌐 Web Service (Node.js + Frontend)</b></summary>
+**1. Deploy the Python backend to Render**
 
 1. Go to [Render Dashboard](https://dashboard.render.com)
-2. Click **"New +"** → **"Web Service"**
-3. Connect your GitHub repository
-4. Configure:
-   - **Name:** `datalix-ai-web`
-   - **Environment:** `Node`
-   - **Build Command:** `npm install && npm run build`
-   - **Start Command:** `npm start`
-   - **Instance Type:** Free or Starter
-
-</details>
-
-<details>
-<summary><b>🐍 Python Backend Service</b></summary>
-
-1. Create another Web Service
-2. Configure:
-   - **Name:** `datalix-ai-python`
+2. Click **"New +"** → **"Web Service"** and connect your GitHub repository
+3. Configure:
+   - **Name:** `datalix-ai-backend`
+   - **Root Directory:** `python_backend`
    - **Environment:** `Python 3`
    - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `cd python_backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers`
    - **Instance Type:** Free or Starter
+4. Add environment variables (from `.env`):
+   - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+   - `GEMINI_API_KEY`, `GROQ_API_KEY`
+   - `NODE_ENV=production` (disables API docs + dev reload)
+   - `ALLOWED_ORIGINS=https://your-app.vercel.app` (your Vercel domain — needed for any direct-to-backend calls)
 
-</details>
+**2. Deploy the frontend to Vercel**
 
-**3. Configure Environment Variables**
+1. Edit `vercel.json` — replace `YOUR-RENDER-BACKEND.onrender.com` with your actual Render service URL
+2. Import the repository at [vercel.com/new](https://vercel.com/new)
+3. Vercel picks up `vercel.json` automatically (`vite build` → `dist/public`)
+4. Deploy — API calls to `/api/*` are transparently forwarded to Render
 
-Add all variables from `.env` to both services in Render dashboard.
+**3. Post-deploy checklist**
 
-**4. Deploy**
-
-- Render will auto-deploy on git push
-- Monitor logs in dashboard
-- Access via provided URL
-
-**📚 Full Guide:** See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)
+- ✅ Run `init_database_with_rls.sql` in the Supabase SQL editor (once)
+- ✅ Confirm `https://<render-service>.onrender.com/health` returns healthy
+- ✅ Sign up, upload a dataset, and send a chat message end-to-end
+- ⚠️ Render free tier sleeps after inactivity — the first request after idle takes ~30–60s (the app shows a cold-start banner)
 
 ### 🐳 Docker Deployment
 
@@ -648,14 +656,16 @@ docker-compose down
 
 ## 🔐 Security Features
 
-- 🔒 **Row-Level Security (RLS)** - Database-level access control
-- 🔑 **Secure Authentication** - Supabase Auth with JWT
-- 🛡️ **API Key Encryption** - Encrypted storage of AI keys
-- 🌐 **CORS Protection** - Restricted cross-origin requests
-- ✅ **Input Validation** - Sanitized user inputs
-- 🚫 **SQL Injection Prevention** - Parameterized queries
-- 🔐 **HTTPS Only** - Enforced secure connections
-- 📝 **Audit Logging** - Track all data operations
+- 🔒 **Row-Level Security (RLS)** — database-level access control on all tables
+- 🔑 **Secure Authentication** — Supabase Auth with server-side JWT verification; fallback sessions expire after 24h
+- 👤 **Session Ownership Enforcement** — every session-scoped endpoint verifies the authenticated user owns the session (responds 404 so IDs can't be probed)
+- ⏱️ **Rate Limiting** — per-IP sliding window: auth 10/min, uploads 10/min, chat 30/min, pipeline 10/min, 120/min global
+- 🌐 **CORS Allowlist** — origins restricted via `ALLOWED_ORIGINS`; no wildcard with credentials
+- 📁 **Upload Validation** — extension allowlist (csv/xlsx/xls/json/parquet), 50 MB size cap, empty-file rejection, row/column caps against decompression bombs
+- 🙊 **No Information Leakage** — internal errors are logged server-side and genericized; validation errors never echo submitted values (e.g. passwords); API docs disabled in production
+- 🔐 **Password Policy** — minimum 8 characters; usernames restricted to safe characters
+- 🛡️ **Security Headers** — `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` on every response
+- 📝 **Audit Logging** — the cleaning pipeline records every automated action
 
 ---
 
@@ -722,14 +732,18 @@ npm run format
 
 ## 📊 Roadmap
 
-### 🎯 Version 3.1 (Q1 2025)
+### ✅ Version 4.0 (Released — July 2026)
+- [x] 🤖 Native AI tool calling (Groq + Gemini) — chat executes operations
+- [x] 🧠 Multi-agent LangGraph analysis pipeline (`/analyze`)
+- [x] 💾 Dataset persistence & session restore across restarts
+- [x] 🔐 Security hardening (ownership checks, rate limiting, upload validation)
+
+### 🚀 Version 4.1 (Planned)
+- [ ] 💬 Persist chat history to database
 - [ ] 🔄 Real-time collaboration
 - [ ] 📊 Advanced statistical tests
 - [ ] 🎨 Custom chart themes
 - [ ] 📤 Export to PowerPoint
-- [ ] 🔌 API webhooks
-
-### 🚀 Version 3.2 (Q2 2025)
 - [ ] 🤖 AutoML integration
 - [ ] 📈 Predictive analytics
 - [ ] 🔄 Data pipeline builder
@@ -751,8 +765,7 @@ npm run format
 
 ### 💬 Get Help
 
-- 📚 [Documentation](./DOCUMENTATION.md)
-- 💡 [FAQs](./docs/FAQ.md)
+- 📝 [Changelog](./CHANGELOG.md)
 - 🐛 [GitHub Issues](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
 - 💬 [Discussions](https://github.com/HimanshuSingh-966/DataLix-AI/discussions)
 - 📧 Email: support@datalix-ai.com
@@ -822,6 +835,6 @@ Special thanks to all [contributors](https://github.com/HimanshuSingh-966/DataLi
 
 Made with ❤️ for data enthusiasts everywhere
 
-**[Website](https://datalix-ai.onrender.com)** • **[GitHub](https://github.com/HimanshuSingh-966/DataLix-AI)** • **[Documentation](./DOCUMENTATION.md)**
+**[Website](https://datalix-ai.onrender.com)** • **[GitHub](https://github.com/HimanshuSingh-966/DataLix-AI)** • **[Changelog](./CHANGELOG.md)**
 
 </div>

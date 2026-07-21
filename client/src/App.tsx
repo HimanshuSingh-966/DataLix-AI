@@ -4,9 +4,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuthStore } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase";
 import { useEffect } from "react";
+import { ColdStartBanner } from "@/components/ColdStartBanner";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import ChatPage from "@/pages/chat";
 import AuthPage from "@/pages/auth";
@@ -51,7 +53,7 @@ function App() {
         const supabase = getSupabase();
         
         if (!supabase) {
-          console.log('Using in-memory authentication - Supabase not configured');
+          console.log('Using local authentication');
           return;
         }
         
@@ -96,7 +98,7 @@ function App() {
           subscription.unsubscribe();
         };
       } catch (error) {
-        console.error('Failed to initialize auth:', error);
+        console.error('Auth initialization failed');
       }
     };
 
@@ -111,10 +113,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={style as React.CSSProperties}>
-          <Toaster />
-          <Router />
-        </SidebarProvider>
+        <ErrorBoundary>
+          <SidebarProvider style={style as React.CSSProperties}>
+            <ColdStartBanner />
+            <Toaster />
+            <Router />
+          </SidebarProvider>
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

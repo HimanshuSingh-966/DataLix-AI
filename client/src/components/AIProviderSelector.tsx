@@ -26,12 +26,15 @@ export function AIProviderSelector({ className }: AIProviderSelectorProps) {
   }>({ gemini: false, groq: false });
 
   useEffect(() => {
-    fetch('/api/ai-providers')
+    const token = localStorage.getItem('access_token');
+    fetch('/api/ai-providers', {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
       .then(res => res.json())
       .then(data => {
         setAvailableProviders(data.providers);
       })
-      .catch(console.error);
+      .catch(() => {});
   }, []);
 
   const providerInfo = {

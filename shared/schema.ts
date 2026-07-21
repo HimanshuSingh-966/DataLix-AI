@@ -25,6 +25,29 @@ export type Profile = typeof profiles.$inferSelect;
 export type User = Profile;
 export type InsertUser = InsertProfile;
 
+// Datasets table (stores uploaded dataset data for persistence)
+export const datasets = pgTable("datasets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: uuid("session_id").notNull().references(() => sessions.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => profiles.id),
+  fileName: text("file_name"),
+  dataCsv: text("data_csv"),
+  dataPreview: jsonb("data_preview"),
+  qualityScore: jsonb("quality_score"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertDatasetSchema = createInsertSchema(datasets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDataset = z.infer<typeof insertDatasetSchema>;
+export type DatasetRow = typeof datasets.$inferSelect;
+
 // Sessions table
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -77,6 +100,8 @@ export interface ChatMessage {
   qualityScore?: DataQuality;
   suggestedActions?: SuggestedAction[];
   functionCalls?: string[];
+  auditLog?: any[];
+  insightSummary?: string;
   error?: boolean;
 }
 

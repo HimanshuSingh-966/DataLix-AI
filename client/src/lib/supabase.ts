@@ -14,7 +14,7 @@ if (supabaseUrl && supabaseAnonKey) {
     },
   });
 } else {
-  console.log('⚠️ Supabase not configured. Using in-memory authentication.');
+  // Supabase not configured, using fallback auth
 }
 
 export const getSupabase = () => supabase;

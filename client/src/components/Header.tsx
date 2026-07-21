@@ -31,11 +31,11 @@ export function Header({ onUploadClick, onNewSession, onSessionHistory, onSettin
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/95 backdrop-blur-sm">
+    <header className="sticky top-4 z-50 w-full max-w-7xl mx-auto border border-border/40 bg-[#0A0A0A]/70 backdrop-blur-md rounded-full shadow-xl shadow-black/40 px-2 mt-4">
       <div className="flex h-14 items-center justify-between px-6">
         {/* Logo and Title */}
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold" data-testid="text-app-title">DataLix</h1>
+          <h1 className="text-xl font-sans tracking-tight ml-2" data-testid="text-app-title">DataLix<span className="font-serif italic font-light ml-0.5 text-primary">AI</span></h1>
 
           {/* Dataset Status */}
           {datasetLoaded && qualityScore !== undefined && (

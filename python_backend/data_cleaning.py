@@ -3,6 +3,9 @@ import numpy as np
 from typing import Dict, Any, List, Optional
 from sklearn.impute import KNNImputer
 
+MAX_KNN_ROWS = 50000
+MAX_KNN_COLUMNS = 50
+
 def clean_dataset(df: pd.DataFrame, parameters: Dict) -> Dict[str, Any]:
     """
     Clean dataset based on parameters
@@ -79,38 +82,42 @@ def handle_missing_values(
     elif method == 'mean':
         for col in columns:
             if pd.api.types.is_numeric_dtype(df[col]):
-                df_result[col].fillna(df[col].mean(), inplace=True)
+                df_result.loc[:, col] = df_result[col].fillna(df[col].mean())
         message = f"Filled missing values with mean in {len(columns)} numeric columns"
     
     elif method == 'median':
         for col in columns:
             if pd.api.types.is_numeric_dtype(df[col]):
-                df_result[col].fillna(df[col].median(), inplace=True)
+                df_result.loc[:, col] = df_result[col].fillna(df[col].median())
         message = f"Filled missing values with median in {len(columns)} numeric columns"
     
     elif method == 'mode':
         for col in columns:
             mode_val = df[col].mode()
             if len(mode_val) > 0:
-                df_result[col].fillna(mode_val[0], inplace=True)
+                df_result.loc[:, col] = df_result[col].fillna(mode_val[0])
         message = f"Filled missing values with mode in {len(columns)} columns"
     
     elif method == 'forward_fill':
-        df_result[columns] = df_result[columns].fillna(method='ffill')
+        df_result.loc[:, columns] = df_result[columns].ffill()
         message = f"Forward filled missing values in {len(columns)} columns"
     
     elif method == 'backward_fill':
-        df_result[columns] = df_result[columns].fillna(method='bfill')
+        df_result.loc[:, columns] = df_result[columns].bfill()
         message = f"Backward filled missing values in {len(columns)} columns"
     
     elif method == 'knn':
-        # KNN imputation for numeric columns only
         numeric_cols = [col for col in columns if pd.api.types.is_numeric_dtype(df[col])]
         if numeric_cols:
-            k_neighbors = parameters.get('knnNeighbors', 5)
-            imputer = KNNImputer(n_neighbors=k_neighbors)
-            df_result[numeric_cols] = imputer.fit_transform(df[numeric_cols])
-            message = f"KNN imputed missing values in {len(numeric_cols)} numeric columns (k={k_neighbors})"
+            if len(df) > MAX_KNN_ROWS:
+                message = f"KNN imputation skipped: dataset too large ({len(df)} rows, max {MAX_KNN_ROWS}). Use mean/median/interpolation instead."
+            elif len(numeric_cols) > MAX_KNN_COLUMNS:
+                message = f"KNN imputation skipped: too many numeric columns ({len(numeric_cols)}, max {MAX_KNN_COLUMNS}). Select fewer columns."
+            else:
+                k_neighbors = parameters.get('knnNeighbors', 5)
+                imputer = KNNImputer(n_neighbors=k_neighbors)
+                df_result[numeric_cols] = imputer.fit_transform(df[numeric_cols])
+                message = f"KNN imputed missing values in {len(numeric_cols)} numeric columns (k={k_neighbors})"
         else:
             message = "No numeric columns found for KNN imputation"
     

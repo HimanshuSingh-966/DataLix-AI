@@ -84,7 +84,11 @@ export default {
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
+        serif: ["Playfair Display", "Georgia", "serif"],
         mono: ["JetBrains Mono", "Menlo", "monospace"],
+      },
+      boxShadow: {
+        "neon-glow": "0 0 15px -3px rgba(59, 130, 246, 0.4), 0 0 6px -2px rgba(59, 130, 246, 0.2)",
       },
       keyframes: {
         "accordion-down": {

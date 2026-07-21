@@ -15,7 +15,7 @@ export default function AuthPage() {
   const { toast } = useToast();
   const { setUser, setToken } = useAuthStore();
   
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ username: '', email: '', password: '', confirmPassword: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -28,16 +28,15 @@ export default function AuthPage() {
       const response = await fetch('/api/auth/signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loginForm.username, // Using username field as email
-          password: loginForm.password
-        })
+      body: JSON.stringify({
+        email: loginForm.email,
+        password: loginForm.password
+      })
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || 'Login failed');
-      }
+    if (!response.ok) {
+      throw new Error('Invalid credentials');
+    }
 
       const data = await response.json();
       
@@ -48,10 +47,10 @@ export default function AuthPage() {
       toast({ description: 'Login successful!' });
       setLocation('/');
     } catch (error) {
-      toast({ 
-        description: error instanceof Error ? error.message : 'Login failed', 
-        variant: 'destructive' 
-      });
+    toast({
+      description: 'Login failed. Please check your credentials.',
+      variant: 'destructive'
+    });
     } finally {
       setIsLoading(false);
     }
@@ -78,10 +77,9 @@ export default function AuthPage() {
         })
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || 'Signup failed');
-      }
+    if (!response.ok) {
+      throw new Error('Signup failed');
+    }
 
       const data = await response.json();
       
@@ -92,10 +90,10 @@ export default function AuthPage() {
       toast({ description: 'Account created successfully!' });
       setLocation('/');
     } catch (error) {
-      toast({ 
-        description: error instanceof Error ? error.message : 'Signup failed', 
-        variant: 'destructive' 
-      });
+    toast({
+      description: 'Signup failed. Please try again.',
+      variant: 'destructive'
+    });
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +104,9 @@ export default function AuthPage() {
     try {
       const { getSupabase } = await import('@/lib/supabase');
       const supabase = getSupabase();
+      if (!supabase) {
+        throw new Error('Supabase is not configured');
+      }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -117,24 +118,30 @@ export default function AuthPage() {
         throw error;
       }
     } catch (error) {
-      toast({
-        description: error instanceof Error ? error.message : 'Failed to initiate Google sign-in',
-        variant: 'destructive'
-      });
+    toast({
+      description: 'Failed to initiate Google sign-in',
+      variant: 'destructive'
+    });
       setIsGoogleLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4 md:p-6">
-      <div className="w-full max-w-md mx-auto">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-chart-1 flex items-center justify-center mb-4">
-            <Sparkles className="h-8 w-8 text-white" />
+    <div className="relative min-h-screen w-full flex items-center justify-center bg-[#050505] p-4 md:p-6 overflow-hidden">
+      {/* Radial Background Glows */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/10 rounded-full blur-[120px] pointer-events-none"></div>
+
+      <div className="relative w-full max-w-md mx-auto z-10">
+        <div className="flex flex-col items-center mb-10 text-center">
+          <div className="inline-flex items-center rounded-full border border-primary/20 px-3 py-1 mb-6 text-[10px] font-semibold tracking-wider uppercase bg-primary/10 text-primary shadow-neon-glow">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary mr-2 animate-pulse"></span>
+            Your AI Data Partner
           </div>
-          <h1 className="text-3xl font-bold mb-2">DataLix AI</h1>
-          <p className="text-muted-foreground text-center">
-            Transform your data with AI-powered analysis
+          <h1 className="text-5xl font-sans tracking-tight mb-4 text-white font-medium leading-tight">
+            DataLix <span className="font-serif italic font-light text-primary pr-2">AI</span>
+          </h1>
+          <p className="text-muted-foreground text-base max-w-[85%] mx-auto">
+            Transform your data with natural language. Clean, analyze, and visualize through conversational AI.
           </p>
         </div>
 
@@ -184,8 +191,8 @@ export default function AuthPage() {
                     id="login-email"
                     type="email"
                     placeholder="Enter your email"
-                    value={loginForm.username}
-                    onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                     required
                     disabled={isLoading}
                     data-testid="input-login-email"
