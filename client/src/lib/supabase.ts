@@ -14,8 +14,31 @@ if (supabaseUrl && supabaseAnonKey) {
     },
   });
 } else {
-  console.log('⚠️ Supabase not configured. Using in-memory authentication.');
+  // Supabase not configured, using fallback auth
 }
 
 export const getSupabase = () => supabase;
 export { supabase };
+
+/**
+ * Returns the current access token for API calls.
+ *
+ * Always prefers the live Supabase session (supabase-js auto-refreshes it, so
+ * this never goes stale — unlike localStorage, which only updates on SIGNED_IN).
+ * Falls back to localStorage for the backend's fallback-auth mode.
+ */
+export async function getAccessToken(): Promise<string | null> {
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        localStorage.setItem('access_token', token);
+        return token;
+      }
+    } catch {
+      // fall through to localStorage
+    }
+  }
+  return localStorage.getItem('access_token');
+}

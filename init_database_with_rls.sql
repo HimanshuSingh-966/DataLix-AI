@@ -131,6 +131,61 @@ CREATE TRIGGER sessions_updated_at_trigger
     EXECUTE FUNCTION update_sessions_updated_at();
 
 -- =============================================================================
+-- TABLE: datasets
+-- Description: Stores uploaded dataset data for persistence across restarts
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS datasets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id UUID NOT NULL UNIQUE REFERENCES sessions(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  file_name TEXT,
+  data_csv TEXT,
+  data_preview JSONB,
+  quality_score JSONB,
+  metadata JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE datasets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own datasets"
+ON datasets FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own datasets"
+ON datasets FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own datasets"
+ON datasets FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own datasets"
+ON datasets FOR DELETE
+USING (auth.uid() = user_id);
+
+CREATE INDEX IF NOT EXISTS idx_datasets_session_id ON datasets(session_id);
+CREATE INDEX IF NOT EXISTS idx_datasets_user_id ON datasets(user_id);
+
+COMMENT ON TABLE datasets IS 'Persisted dataset data for analysis sessions';
+COMMENT ON COLUMN datasets.session_id IS 'Associated session (unique, one dataset per session)';
+COMMENT ON COLUMN datasets.user_id IS 'Owner of the dataset';
+COMMENT ON COLUMN datasets.data_csv IS 'Dataset content stored as CSV text';
+COMMENT ON COLUMN datasets.data_preview IS 'Data preview structure (JSON)';
+COMMENT ON COLUMN datasets.quality_score IS 'Data quality analysis results (JSON)';
+COMMENT ON COLUMN datasets.metadata IS 'Dataset metadata (row count, column count, etc.)';
+
+-- Trigger to auto-update updated_at on datasets
+DROP TRIGGER IF EXISTS datasets_updated_at_trigger ON datasets;
+CREATE TRIGGER datasets_updated_at_trigger
+BEFORE UPDATE ON datasets
+FOR EACH ROW
+EXECUTE FUNCTION update_sessions_updated_at();
+
+-- =============================================================================
 -- TABLE: messages
 -- Description: Stores chat messages and AI analysis results within sessions
 -- =============================================================================

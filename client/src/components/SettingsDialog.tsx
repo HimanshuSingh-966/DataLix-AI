@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Card } from '@/components/ui/card';
 import { useChatStore } from '@/lib/store';
-import { Moon, Sun, Laptop } from 'lucide-react';
+import { Moon } from 'lucide-react';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -15,39 +15,20 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { aiProvider, setAiProvider } = useChatStore();
-  const [theme, setTheme] = useState<string>('system');
   const [autoScroll, setAutoScroll] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'system';
-    setTheme(savedTheme);
-    
     const savedAutoScroll = localStorage.getItem('autoScroll') !== 'false';
     setAutoScroll(savedAutoScroll);
-    
+
     const savedSound = localStorage.getItem('soundEnabled') === 'true';
     setSoundEnabled(savedSound);
-    
+
     const savedCompact = localStorage.getItem('compactMode') === 'true';
     setCompactMode(savedCompact);
   }, [open]);
-
-  const handleThemeChange = (newTheme: string) => {
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    
-    if (newTheme === 'system') {
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(newTheme);
-    }
-  };
 
   const handleAutoScrollChange = (checked: boolean) => {
     setAutoScroll(checked);
@@ -80,45 +61,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
         <div className="space-y-6 py-4">
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-medium mb-3">Appearance</h3>
-              <Card className="p-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="theme-select">Theme</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Choose your preferred color theme
-                      </p>
-                    </div>
-                    <Select value={theme} onValueChange={handleThemeChange}>
-                      <SelectTrigger className="w-[140px]" id="theme-select" data-testid="select-theme">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="light" data-testid="theme-light">
-                          <div className="flex items-center gap-2">
-                            <Sun className="h-4 w-4" />
-                            Light
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="dark" data-testid="theme-dark">
-                          <div className="flex items-center gap-2">
-                            <Moon className="h-4 w-4" />
-                            Dark
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="system" data-testid="theme-system">
-                          <div className="flex items-center gap-2">
-                            <Laptop className="h-4 w-4" />
-                            System
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+        <div>
+          <h3 className="text-sm font-medium mb-3">Appearance</h3>
+          <Card className="p-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Theme</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Dark mode (default)
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Moon className="h-4 w-4" />
+                  <span className="text-sm">Dark</span>
+                </div>
+              </div>
 
-                  <Separator />
+              <Separator />
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">

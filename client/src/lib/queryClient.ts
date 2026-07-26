@@ -1,6 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { getAccessToken } from "./supabase";
 
 export class ApiError extends Error {
   constructor(public status: number, public body: string) {
@@ -9,14 +8,14 @@ export class ApiError extends Error {
   }
 }
 
-function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem("access_token");
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const token = await getAccessToken();
   const headers: HeadersInit = {};
-  
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
-  
+
   return headers;
 }
 
@@ -32,10 +31,10 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+  const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
   
   const headers: HeadersInit = {
-    ...getAuthHeaders(),
+    ...(await getAuthHeaders()),
     ...(data ? { "Content-Type": "application/json" } : {}),
   };
   
@@ -57,10 +56,10 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const url = queryKey.join("/") as string;
-    const fullUrl = url.startsWith("http") ? url : `${API_BASE_URL}${url}`;
+  const fullUrl = url.startsWith("http") || url.startsWith("/") ? url : `/${url}`;
     
     const res = await fetch(fullUrl, {
-      headers: getAuthHeaders(),
+      headers: await getAuthHeaders(),
       credentials: "include",
     });
 

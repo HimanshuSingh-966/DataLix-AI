@@ -50,9 +50,9 @@ export default function AuthCallback() {
           throw new Error('No session found');
         }
       } catch (error) {
-        console.error('OAuth callback error:', error);
-        toast({
-          description: error instanceof Error ? error.message : 'Authentication failed',
+      console.error('OAuth callback failed');
+      toast({
+        description: 'Authentication failed',
           variant: 'destructive',
         });
         setLocation('/auth');

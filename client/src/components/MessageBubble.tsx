@@ -6,6 +6,7 @@ import { formatTimestamp, copyToClipboard } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -37,10 +38,10 @@ export function MessageBubble({ message, onRegenerate, onEdit, onDelete }: Messa
     >
       {/* Avatar */}
       <div
-        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-          isUser
-            ? 'bg-muted text-foreground'
-            : 'bg-primary/10 text-primary border border-primary/20'
+        className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold tracking-wide ${
+            isUser
+              ? 'bg-[#1C1C1E] text-white'
+              : 'bg-primary/20 text-primary border border-primary/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]'
         }`}
         data-testid={`avatar-${message.role}`}
       >
@@ -50,12 +51,12 @@ export function MessageBubble({ message, onRegenerate, onEdit, onDelete }: Messa
       <div className={`flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'} flex-1 max-w-3xl`}>
         {/* Message Content */}
         <div
-          className={`rounded-2xl px-4 py-3 ${
+          className={`rounded-[20px] px-5 py-3.5 shadow-sm ${
             message.error
               ? 'bg-destructive/10 border border-destructive/20 text-destructive'
               : isUser
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-card border border-card-border'
+              ? 'bg-[#1C1C1E] text-white'
+              : 'bg-gradient-to-br from-[#121212] to-[#0A0A0A] border border-[#1C1C1E] text-white'
           }`}
           data-testid="message-content"
         >
@@ -63,7 +64,7 @@ export function MessageBubble({ message, onRegenerate, onEdit, onDelete }: Messa
             <p className="text-sm whitespace-pre-wrap" data-testid="text-message-user">{message.content}</p>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none text-card-foreground" data-testid="text-message-assistant">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
                 {message.content}
               </ReactMarkdown>
             </div>

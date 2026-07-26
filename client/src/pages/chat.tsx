@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { queryClient, apiRequest, ApiError } from '@/lib/queryClient';
+import { getAccessToken } from '@/lib/supabase';
 import { Header } from '@/components/Header';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { MessageBubble } from '@/components/MessageBubble';
@@ -86,7 +87,7 @@ export default function ChatPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -163,7 +164,7 @@ export default function ChatPage() {
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         },
         body: formData
       });
@@ -221,7 +222,7 @@ export default function ChatPage() {
     try {
       const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         }
       });
 
@@ -300,6 +301,77 @@ export default function ChatPage() {
     setShowSettingsDialog(true);
   };
 
+  const chatInputNode = (
+    <div className="w-full">
+      <div className="relative">
+        <div className="flex items-end gap-3">
+          <div className="flex-1 relative bg-card border border-border rounded-2xl p-3 shadow-sm transition-all focus-within:ring-1 focus-within:ring-primary/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowUploadDialog(true)}
+                data-testid="button-attach-file"
+                className="h-7 px-2"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </Button>
+              <AIProviderSelector className="h-7" />
+            </div>
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="Ask me anything about your data..."
+              className="resize-none min-h-[44px] max-h-32 border-0 bg-transparent p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              rows={1}
+              disabled={isLoading}
+              data-testid="input-chat-message"
+            />
+          </div>
+
+          <Button
+            onClick={handleSend}
+            disabled={!input.trim() || isLoading}
+            size="icon"
+            className="h-12 w-12 rounded-full shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+            data-testid="button-send-message"
+          >
+            <ArrowUp className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs text-muted-foreground mb-3 text-center">Try asking:</p>
+        <div className="flex flex-wrap gap-2 justify-center max-w-xl mx-auto" data-testid="container-examples">
+          <button
+            className="text-sm text-foreground/70 px-3 py-1.5 rounded-full border border-border/50 hover:bg-muted transition-colors"
+            onClick={() => handleSuggestedAction('Show me the data quality score')}
+            data-testid="example-quality"
+          >
+            Show me the data quality score
+          </button>
+          <button
+            className="text-sm text-foreground/70 px-3 py-1.5 rounded-full border border-border/50 hover:bg-muted transition-colors"
+            onClick={() => handleSuggestedAction('Remove outliers')}
+            data-testid="example-outliers"
+          >
+            Remove outliers
+          </button>
+          <button
+            className="text-sm text-foreground/70 px-3 py-1.5 rounded-full border border-border/50 hover:bg-muted transition-colors"
+            onClick={() => handleSuggestedAction('Create a correlation heatmap')}
+            data-testid="example-heatmap"
+          >
+            Create a correlation heatmap
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-screen w-full bg-background">
       <SessionSidebar
@@ -330,7 +402,9 @@ export default function ChatPage() {
               type="no-messages" 
               onAction={() => setShowUploadDialog(true)} 
               onExampleDataset={handleExampleDataset}
-            />
+            >
+              {chatInputNode}
+            </EmptyState>
           ) : (
             <div className="space-y-6">
               {messages.map((message) => (
@@ -381,75 +455,13 @@ export default function ChatPage() {
         </div>
       </div>
 
-      <div className="border-t border-border bg-background flex justify-center">
-        <div className="w-full max-w-3xl px-4 py-6">
-          <div className="relative">
-            <div className="flex items-end gap-3">
-              <div className="flex-1 relative bg-card border border-border rounded-2xl p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowUploadDialog(true)}
-                    data-testid="button-attach-file"
-                    className="h-7 px-2"
-                  >
-                    <Paperclip className="h-3.5 w-3.5" />
-                  </Button>
-                  <AIProviderSelector className="h-7" />
-                </div>
-                <Textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  placeholder="Ask me anything about your data..."
-                  className="resize-none min-h-[44px] max-h-32 border-0 bg-transparent p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  rows={1}
-                  disabled={isLoading}
-                  data-testid="input-chat-message"
-                />
-              </div>
-
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                size="icon"
-                className="h-12 w-12 rounded-full shrink-0"
-                data-testid="button-send-message"
-              >
-                <ArrowUp className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-muted-foreground" data-testid="container-examples">
-            <button
-              className="text-primary hover:underline"
-              onClick={() => handleSuggestedAction('Show correlation matrix')}
-              data-testid="example-correlation"
-            >
-              Correlation
-            </button>
-            <span>•</span>
-            <button
-              className="text-primary hover:underline"
-              onClick={() => handleSuggestedAction('Export as CSV')}
-              data-testid="example-export"
-            >
-              Export
-            </button>
-            <span>•</span>
-            <button
-              className="text-primary hover:underline"
-              onClick={() => handleSuggestedAction('Create a histogram')}
-              data-testid="example-histogram"
-            >
-              Visualize
-            </button>
+      {messages.length > 0 && (
+        <div className="border-t border-border bg-background flex justify-center">
+          <div className="w-full max-w-3xl px-4 py-6">
+            {chatInputNode}
           </div>
         </div>
-      </div>
+      )}
 
       <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
         <DialogContent className="sm:max-w-2xl">

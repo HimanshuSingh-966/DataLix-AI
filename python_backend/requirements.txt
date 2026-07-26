@@ -6,10 +6,21 @@ numpy
 scikit-learn
 plotly
 openpyxl
+xlrd
 pyarrow
 python-jose[cryptography]
 passlib[bcrypt]
-supabase
+# passlib 1.7.4 is incompatible with bcrypt >= 4.1 (72-byte check crashes)
+bcrypt==4.0.1
+# Database & Cloud
+supabase>=2.31.0
+httpx>=0.28.0
+websockets>=13.0
+
+# LangGraph Multi-Agent System
+langgraph>=0.0.26
+langchain-google-genai>=0.0.9
+langchain-groq>=0.0.1
 google-generativeai
 groq
 python-dotenv

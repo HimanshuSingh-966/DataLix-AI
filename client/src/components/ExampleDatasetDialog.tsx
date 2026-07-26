@@ -1,3 +1,4 @@
+import { getAccessToken } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
@@ -42,7 +43,7 @@ export function ExampleDatasetDialog({ open, onOpenChange, onDatasetLoaded }: Ex
       setLoading(true);
       const response = await fetch('/api/example-datasets', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         }
       });
 
@@ -69,7 +70,7 @@ export function ExampleDatasetDialog({ open, onOpenChange, onDatasetLoaded }: Ex
       const response = await fetch(`/api/load-example-dataset?dataset_id=${datasetId}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${await getAccessToken()}`
         }
       });
 
