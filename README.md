@@ -11,9 +11,9 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://python.org)
-[![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://datalix-ai.onrender.com)
+[![Live Demo](https://img.shields.io/badge/demo-live-success.svg)](https://datalix-ai.vercel.app)
 
-[🚀 Live Demo](https://datalix-ai.onrender.com) • [📝 Changelog](./CHANGELOG.md) • [🐛 Report Bug](https://github.com/HimanshuSingh-966/DataLix-AI/issues) • [✨ Request Feature](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
+[🚀 Live Demo](https://datalix-ai.vercel.app) • [📝 Changelog](./CHANGELOG.md) • [🐛 Report Bug](https://github.com/HimanshuSingh-966/DataLix-AI/issues) • [✨ Request Feature](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
 
 </div>
 
@@ -190,9 +190,9 @@ Never lose your analysis progress:
 
 ---
 
-## 🎬 Demo & Screenshots
+## 🎬 Demo
 
-### 🔴 [Watch Live Demo](https://datalix-ai.onrender.com)
+### 🔴 [Watch Live Demo](https://datalix-ai.vercel.app)
 
 
 ---
@@ -771,7 +771,6 @@ npm run format
 - [ ] 🎨 White-labeling
 - [ ] 🔐 SSO integration
 
-[Vote on features →](https://github.com/HimanshuSingh-966/DataLix-AI/discussions/categories/ideas)
 
 ---
 
@@ -781,8 +780,7 @@ npm run format
 
 - 📝 [Changelog](./CHANGELOG.md)
 - 🐛 [GitHub Issues](https://github.com/HimanshuSingh-966/DataLix-AI/issues)
-- 💬 [Discussions](https://github.com/HimanshuSingh-966/DataLix-AI/discussions)
-- 📧 Email: support@datalix-ai.com
+- 📧 Email: choudharyhimanshusingh966@gmail.com
 
 ### 🌟 Show Your Support
 
@@ -825,7 +823,6 @@ Built with ❤️ using these amazing tools:
 - **[Tailwind CSS](https://tailwindcss.com)** - Styling framework
 - **[React](https://react.dev)** - UI library
 
-Special thanks to all [contributors](https://github.com/HimanshuSingh-966/DataLix-AI/graphs/contributors)! 🎉
 
 ---
 
@@ -849,6 +846,6 @@ Special thanks to all [contributors](https://github.com/HimanshuSingh-966/DataLi
 
 Made with ❤️ for data enthusiasts everywhere
 
-**[Website](https://datalix-ai.onrender.com)** • **[GitHub](https://github.com/HimanshuSingh-966/DataLix-AI)** • **[Changelog](./CHANGELOG.md)**
+**[Website](https://datalix-ai.vercel.app)** • **[GitHub](https://github.com/HimanshuSingh-966/DataLix-AI)** • **[Changelog](./CHANGELOG.md)**
 
 </div>
