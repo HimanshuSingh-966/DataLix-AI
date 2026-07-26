@@ -87,8 +87,10 @@ export function SessionSidebar({ currentSessionId, onSessionSelect, onNewSession
     }
   };
 
-  const formatDate = (date: Date | string) => {
+  const formatDate = (date: Date | string | undefined | null) => {
+    if (!date) return '';
     const dateObj = typeof date === 'string' ? new Date(date) : date;
+    if (isNaN(dateObj.getTime())) return '';
     const now = new Date();
     const diffInMs = now.getTime() - dateObj.getTime();
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
@@ -173,7 +175,7 @@ export function SessionSidebar({ currentSessionId, onSessionSelect, onNewSession
                                   {session.name || 'Untitled Session'}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  {formatDate(session.updatedAt)}
+                                  {formatDate(session.createdAt)}
                                 </div>
                               </div>
                             </div>

@@ -33,21 +33,19 @@ else:
 if not GEMINI_API_KEY and not GROQ_API_KEY:
     logger.error("No AI provider configured. Set GEMINI_API_KEY or GROQ_API_KEY")
 
-# OpenAI-style tool schemas for Groq native tool calling.
-# Mirrors the Gemini glm.FunctionDeclaration list below.
-GROQ_TOOLS = [
+# Single source of truth for tool schemas (OpenAI JSON-schema format).
+# The Gemini declarations are generated from this list by _build_gemini_tool().
+TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "get_statistics",
-            "description": "Calculate statistical summary (mean, median, std, min, max, quartiles) for numeric columns",
+            "description": "Statistical summary (mean, median, std, min, max, quartiles) for numeric columns. Use group_by to compare groups, e.g. average marks per department.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "columns": {
-                        "type": "string",
-                        "description": "Comma-separated column names to analyze"
-                    }
+                    "columns": {"type": "string", "description": "Comma-separated column names to analyze (all numeric columns if omitted)"},
+                    "group_by": {"type": "string", "description": "Categorical column to group by, e.g. 'Department' for per-department stats"}
                 }
             }
         }
@@ -63,17 +61,28 @@ GROQ_TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "create_visualization",
-            "description": "Create charts: histogram, scatter, line, bar, box, violin, heatmap, correlation, pie",
+            "name": "get_correlation",
+            "description": "Correlation matrix between numeric columns, with a heatmap",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "chart_type": {
-                        "type": "string",
-                        "description": "Type: histogram, scatter, line, bar, box, violin, heatmap, correlation, pie"
-                    },
-                    "x_column": {"type": "string", "description": "Column for X-axis"},
-                    "y_column": {"type": "string", "description": "Column for Y-axis"},
+                    "columns": {"type": "string", "description": "Comma-separated numeric columns (all if omitted)"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_visualization",
+            "description": "Create a chart. For 'how many X per Y' use aggregation='count' with x_column only. For 'average/total X by Y' set y_column and aggregation. NEVER use an ID column as y_column.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "chart_type": {"type": "string", "description": "One of: histogram, scatter, line, bar, box, violin, heatmap, correlation, pie"},
+                    "x_column": {"type": "string", "description": "Column for X-axis (category for bar/pie)"},
+                    "y_column": {"type": "string", "description": "Numeric column for Y-axis. OMIT for count charts."},
+                    "aggregation": {"type": "string", "description": "How to aggregate rows per x value: count, sum, mean, median, min, max. Use 'count' for 'number of rows per category'."},
                     "title": {"type": "string", "description": "Chart title"}
                 },
                 "required": ["chart_type"]
@@ -84,18 +93,12 @@ GROQ_TOOLS = [
         "type": "function",
         "function": {
             "name": "clean_data",
-            "description": "Clean dataset: handle missing values, outliers, duplicates",
+            "description": "Clean dataset: handle missing values, outliers, duplicates. THIS MODIFIES THE DATA.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "action": {
-                        "type": "string",
-                        "description": "Action: handle_missing, remove_outliers, remove_duplicates"
-                    },
-                    "method": {
-                        "type": "string",
-                        "description": "Method: mean, median, drop, iqr, zscore"
-                    }
+                    "action": {"type": "string", "description": "Action: handle_missing, remove_outliers, remove_duplicates"},
+                    "method": {"type": "string", "description": "Method: mean, median, drop, iqr, zscore"}
                 },
                 "required": ["action"]
             }
@@ -105,7 +108,15 @@ GROQ_TOOLS = [
         "type": "function",
         "function": {
             "name": "show_data_preview",
-            "description": "Display the current dataset table to show the user the data",
+            "description": "Display the current dataset table to the user",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "show_duplicates",
+            "description": "Show duplicated rows WITHOUT removing them (inspection only)",
             "parameters": {"type": "object", "properties": {}}
         }
     },
@@ -117,10 +128,7 @@ GROQ_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "columns": {
-                        "type": "string",
-                        "description": "Comma-separated column names to remove"
-                    }
+                    "columns": {"type": "string", "description": "Comma-separated column names to remove"}
                 },
                 "required": ["columns"]
             }
@@ -130,18 +138,95 @@ GROQ_TOOLS = [
         "type": "function",
         "function": {
             "name": "filter_rows",
-            "description": "Filter/keep only rows that match a condition, removing all others",
+            "description": "Find rows matching one or more conditions. Default mode 'view' just SHOWS matching rows without changing the dataset — use it for 'show me...' requests. Only use mode 'permanent' when the user explicitly wants to delete/keep-only rows.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "column": {"type": "string", "description": "Column name to filter on"},
-                    "operator": {
-                        "type": "string",
-                        "description": "Operator: >, <, ==, !=, >=, <=, contains"
+                    "conditions": {
+                        "type": "array",
+                        "description": "One or more filter conditions",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "column": {"type": "string", "description": "Column name"},
+                                "operator": {"type": "string", "description": "One of: >, <, ==, !=, >=, <=, contains"},
+                                "value": {"type": "string", "description": "Value to compare against (dates as YYYY-MM-DD)"}
+                            },
+                            "required": ["column", "operator", "value"]
+                        }
                     },
-                    "value": {"type": "string", "description": "Value to compare against"}
+                    "combine": {"type": "string", "description": "How to combine multiple conditions: 'and' (default) or 'or'"},
+                    "mode": {"type": "string", "description": "'view' (default, dataset unchanged) or 'permanent' (keeps only matching rows)"}
                 },
-                "required": ["column", "operator", "value"]
+                "required": ["conditions"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sort_data",
+            "description": "Sort by a column. With limit, shows the top N rows WITHOUT changing the dataset — use for 'top 5 by marks' or 'who has the highest X'. Without limit, permanently reorders the dataset.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string", "description": "Column to sort by"},
+                    "order": {"type": "string", "description": "'desc' (default) or 'asc'"},
+                    "limit": {"type": "integer", "description": "Show only the top N rows (view only, no mutation)"}
+                },
+                "required": ["column"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_column",
+            "description": "Create a new derived column from an arithmetic formula over existing columns, e.g. name='Total' formula='Price * Quantity'",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "New column name"},
+                    "formula": {"type": "string", "description": "Arithmetic formula using existing column names, e.g. 'Marks / 100 * Attendance'"}
+                },
+                "required": ["name", "formula"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_column",
+            "description": "Rename a column",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "old_name": {"type": "string", "description": "Current column name"},
+                    "new_name": {"type": "string", "description": "New column name"}
+                },
+                "required": ["old_name", "new_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "reset_dataset",
+            "description": "Undo ALL modifications and restore the dataset to its original uploaded state. Use when the user says undo, revert, reset, or start over.",
+            "parameters": {"type": "object", "properties": {}}
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ml_analysis",
+            "description": "Machine learning analysis: clustering, anomaly_detection, dimensionality_reduction, feature_importance",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "analysis_type": {"type": "string", "description": "One of: clustering, anomaly_detection, dimensionality_reduction, feature_importance"}
+                },
+                "required": ["analysis_type"]
             }
         }
     },
@@ -155,6 +240,48 @@ GROQ_TOOLS = [
     }
 ]
 
+# Backwards-compatible alias
+GROQ_TOOLS = TOOLS
+
+_GLM_TYPE_MAP = {
+    "object": glm.Type.OBJECT,
+    "string": glm.Type.STRING,
+    "integer": glm.Type.INTEGER,
+    "number": glm.Type.NUMBER,
+    "boolean": glm.Type.BOOLEAN,
+    "array": glm.Type.ARRAY,
+}
+
+
+def _to_glm_schema(js: Dict[str, Any]) -> "glm.Schema":
+    """Convert an OpenAI-style JSON schema fragment to a Gemini glm.Schema."""
+    schema = glm.Schema(type=_GLM_TYPE_MAP.get(js.get("type", "string"), glm.Type.STRING))
+    if js.get("description"):
+        schema.description = js["description"]
+    if js.get("type") == "object":
+        for key, prop in (js.get("properties") or {}).items():
+            schema.properties[key] = _to_glm_schema(prop)
+        for req in js.get("required", []):
+            schema.required.append(req)
+    if js.get("type") == "array" and js.get("items"):
+        schema.items = _to_glm_schema(js["items"])
+    return schema
+
+
+def _build_gemini_tool() -> "glm.Tool":
+    """Generate the Gemini tool declarations from TOOLS (single schema source)."""
+    return glm.Tool(
+        function_declarations=[
+            glm.FunctionDeclaration(
+                name=t["function"]["name"],
+                description=t["function"]["description"],
+                parameters=_to_glm_schema(t["function"]["parameters"]),
+            )
+            for t in TOOLS
+        ]
+    )
+
+
 
 class AIService:
     def __init__(self, data_processor: DataProcessor):
@@ -163,130 +290,9 @@ class AIService:
         self.groq_available = bool(GROQ_API_KEY)
 
         if GEMINI_API_KEY:
-            tool = glm.Tool(
-                function_declarations=[
-                    glm.FunctionDeclaration(
-                        name="get_statistics",
-                        description="Calculate statistical summary (mean, median, std, min, max, quartiles) for numeric columns",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={
-                                "columns": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Comma-separated column names to analyze"
-                                )
-                            }
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="detect_missing_values",
-                        description="Show all columns that have missing/null values with counts and percentages",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={}
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="create_visualization",
-                        description="Create charts: histogram, scatter, line, bar, box, violin, heatmap, correlation, pie",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={
-                                "chart_type": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Type: histogram, scatter, line, bar, heatmap, correlation, pie"
-                                ),
-                                "x_column": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Column for X-axis"
-                                ),
-                                "y_column": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Column for Y-axis"
-                                ),
-                                "title": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Chart title"
-                                )
-                            },
-                            required=["chart_type"]
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="clean_data",
-                        description="Clean dataset: handle missing values, outliers, duplicates",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={
-                                "action": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Action: handle_missing, remove_outliers, remove_duplicates"
-                                ),
-                                "method": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Method: mean, median, drop, iqr, zscore"
-                                )
-                            },
-                            required=["action"]
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="show_data_preview",
-                        description="Display the current dataset table to show the user the data",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={}
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="remove_columns",
-                        description="Remove/delete one or more columns from the dataset permanently",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={
-                                "columns": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Comma-separated column names to remove"
-                                )
-                            },
-                            required=["columns"]
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="filter_rows",
-                        description="Filter/keep only rows that match a condition, removing all others",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={
-                                "column": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Column name to filter on"
-                                ),
-                                "operator": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Operator: >, <, ==, !=, >=, <=, contains"
-                                ),
-                                "value": glm.Schema(
-                                    type=glm.Type.STRING,
-                                    description="Value to compare against"
-                                )
-                            },
-                            required=["column", "operator", "value"]
-                        )
-                    ),
-                    glm.FunctionDeclaration(
-                        name="run_full_analysis",
-                        description="Run the full multi-agent analysis pipeline: profile the dataset, diagnose quality issues, clean a working copy, auto-generate charts, and produce an insight summary. Use when the user asks to analyze, explore, audit, or summarize the whole dataset.",
-                        parameters=glm.Schema(
-                            type=glm.Type.OBJECT,
-                            properties={}
-                        )
-                    )
-                ]
-            )
             self.model = genai.GenerativeModel(
                 'gemini-2.5-flash',
-                tools=[tool]
+                tools=[_build_gemini_tool()]
             )
         else:
             self.model = None
@@ -341,7 +347,9 @@ class AIService:
         if function_name == "get_statistics":
             cols = function_args.get('columns')
             columns_list = [c.strip() for c in str(cols).split(',')] if cols else None
-            result = self.data_processor.calculate_statistics(session_id, columns_list)
+            result = self.data_processor.calculate_statistics(
+                session_id, columns_list, group_by=function_args.get('group_by') or None
+            )
 
         elif function_name == "detect_missing_values":
             result = self.data_processor.detect_missing_values(session_id)
@@ -407,63 +415,61 @@ class AIService:
                 }
 
         elif function_name == "filter_rows":
-            df = self.data_processor.get_dataframe(session_id)
-            col = str(function_args['column'])
-            op = str(function_args['operator'])
-            val = str(function_args['value'])
+            conditions = function_args.get('conditions')
+            if not conditions and function_args.get('column'):
+                # legacy single-condition shape
+                conditions = [{
+                    "column": function_args.get('column'),
+                    "operator": function_args.get('operator'),
+                    "value": function_args.get('value'),
+                }]
+            outcome = self.data_processor.filter_rows(
+                session_id,
+                conditions or [],
+                combine=str(function_args.get('combine') or 'and').lower(),
+                mode=str(function_args.get('mode') or 'view').lower(),
+            )
+            data_preview = outcome.pop('preview', None)
+            result = outcome
 
-            if col not in df.columns:
-                return {
-                    "result": {
-                        "error": f"Column '{col}' not found in dataset. Available columns: {', '.join(df.columns.tolist())}"
-                    },
-                    "chart_data": None,
-                    "data_preview": None
-                }
+        elif function_name == "sort_data":
+            limit = function_args.get('limit')
+            outcome = self.data_processor.sort_data(
+                session_id,
+                column=str(function_args['column']),
+                order=str(function_args.get('order') or 'desc'),
+                limit=int(limit) if limit else None,
+            )
+            data_preview = outcome.pop('preview', None)
+            result = outcome
 
-            try:
-                if df[col].dtype in ['int64', 'float64']:
-                    val = float(val)
-            except ValueError:
-                return {
-                    "result": {"error": f"Cannot convert '{val}' to number for column '{col}'"},
-                    "chart_data": None,
-                    "data_preview": None
-                }
+        elif function_name == "add_column":
+            outcome = self.data_processor.add_column(
+                session_id,
+                name=str(function_args['name']),
+                formula=str(function_args['formula']),
+            )
+            data_preview = outcome.pop('preview', None)
+            result = outcome
 
-            import pandas as pd
-            try:
-                if op == '>':
-                    df_filtered = pd.DataFrame(df[df[col] > val])
-                elif op == '<':
-                    df_filtered = pd.DataFrame(df[df[col] < val])
-                elif op == '==':
-                    df_filtered = pd.DataFrame(df[df[col] == val])
-                elif op == '!=':
-                    df_filtered = pd.DataFrame(df[df[col] != val])
-                elif op == '>=':
-                    df_filtered = pd.DataFrame(df[df[col] >= val])
-                elif op == '<=':
-                    df_filtered = pd.DataFrame(df[df[col] <= val])
-                elif op == 'contains':
-                    df_filtered = pd.DataFrame(df[df[col].astype(str).str.contains(re.escape(str(val)), case=False)])
-                else:
-                    return {
-                        "result": {"error": f"Unsupported operator '{op}'. Use: >, <, ==, !=, >=, <=, contains"},
-                        "chart_data": None,
-                        "data_preview": None
-                    }
+        elif function_name == "rename_column":
+            outcome = self.data_processor.rename_column(
+                session_id,
+                old_name=str(function_args['old_name']),
+                new_name=str(function_args['new_name']),
+            )
+            data_preview = outcome.pop('preview', None)
+            result = outcome
 
-                self.data_processor.update_dataframe(session_id, df_filtered)
-                data_preview = self.data_processor._create_preview(df_filtered, max_rows=100)
-                result = {
-                    "message": f"✓ Kept {len(df_filtered)} rows where {col} {op} {val} (removed {len(df) - len(df_filtered)} rows)",
-                    "filtered_rows": len(df_filtered),
-                    "original_rows": len(df),
-                    "removed_rows": len(df) - len(df_filtered)
-                }
-            except Exception:
-                result = {"error": "Filter operation failed"}
+        elif function_name == "show_duplicates":
+            outcome = self.data_processor.get_duplicates(session_id)
+            data_preview = outcome.pop('preview', None)
+            result = outcome
+
+        elif function_name == "reset_dataset":
+            outcome = self.data_processor.reset_dataset(session_id)
+            data_preview = outcome.pop('preview', None)
+            result = outcome
 
         elif function_name == "ml_analysis":
             result = self.data_processor.ml_analysis(
@@ -569,16 +575,19 @@ DATA PREVIEW (first 3 rows):
 USER REQUEST: {message}
 
 CRITICAL INSTRUCTIONS - YOU ARE AN ACTION-ORIENTED ASSISTANT:
-1. ALWAYS PERFORM THE ACTION - never just give instructions or suggestions
-2. When user says "remove/delete column X" → CALL remove_columns immediately
-3. When user says "filter/keep/show rows where..." → CALL filter_rows immediately
-4. When user says "remove duplicates" → CALL clean_data with action='remove_duplicates'
-5. When user says "handle/fill/drop missing values" → CALL clean_data with action='handle_missing'
-6. When user says "remove outliers" → CALL clean_data with action='remove_outliers'
-7. When user says "create/show visualization" → CALL create_visualization
-8. For questions about data → Answer directly using the actual data shown
-9. After ANY operation → Confirm what you did and show the results
-10. NEVER say "you can do X" or "try doing Y" - JUST DO IT
+1. ALWAYS PERFORM THE ACTION using the provided tools - never just give instructions or suggestions
+2. "how many rows/records per <category>" → create_visualization with chart_type='bar', x_column=<category>, aggregation='count', NO y_column. NEVER use an ID column (Student_ID, Order_ID, ...) as y_column.
+3. "average/total <numeric> by <category>" chart → create_visualization with y_column=<numeric> and aggregation='mean' or 'sum'
+4. "compare groups" or "average X per Y" as numbers → get_statistics with group_by=<category>
+5. "show/find rows where..." → filter_rows with mode='view' (default - does NOT change the data). Use mode='permanent' ONLY when the user explicitly says delete/remove/keep only those rows.
+6. "top N by X" or "who has the highest/lowest X" → sort_data with column=X, limit=N (view only, answer from the returned records)
+7. "add/create/compute a new column" → add_column; "rename column" → rename_column
+8. "undo/revert/reset/start over" → reset_dataset
+9. "show duplicates" → show_duplicates (inspect only); "remove duplicates" → clean_data with action='remove_duplicates'
+10. "remove/delete column X" → remove_columns; missing values → clean_data action='handle_missing'; outliers → clean_data action='remove_outliers'
+11. "analyze/explore/audit/summarize the whole dataset" → run_full_analysis
+12. For factual questions about specific values (max, min, who, which) → use sort_data or get_statistics instead of reading the preview - the preview may be truncated
+13. After ANY operation confirm what you did with the results. NEVER say "you can do X" or "try doing Y" - JUST DO IT
 """
         except Exception as e:
             dataset_context = f"User message: {message}\n\nNote: No dataset loaded yet. If they're asking about data operations, suggest uploading a dataset first."
@@ -715,15 +724,18 @@ USER REQUEST: {message}
 
 CRITICAL INSTRUCTIONS - YOU ARE AN ACTION-ORIENTED ASSISTANT:
 1. ALWAYS PERFORM THE ACTION using the provided tools - never just give instructions or suggestions
-2. When user says "remove/delete column X" → CALL remove_columns immediately
-3. When user says "filter/keep/show rows where..." → CALL filter_rows immediately
-4. When user says "remove duplicates" → CALL clean_data with action='remove_duplicates'
-5. When user says "handle/fill/drop missing values" → CALL clean_data with action='handle_missing'
-6. When user says "remove outliers" → CALL clean_data with action='remove_outliers'
-7. When user says "create/show visualization/chart" → CALL create_visualization
-8. When user says "analyze/explore/audit/summarize the dataset" → CALL run_full_analysis
-9. For questions about data → Answer directly using the actual data shown, without calling tools
-10. NEVER say "you can do X" or "try doing Y" - JUST DO IT
+2. "how many rows/records per <category>" → create_visualization with chart_type='bar', x_column=<category>, aggregation='count', NO y_column. NEVER use an ID column (Student_ID, Order_ID, ...) as y_column.
+3. "average/total <numeric> by <category>" chart → create_visualization with y_column=<numeric> and aggregation='mean' or 'sum'
+4. "compare groups" or "average X per Y" as numbers → get_statistics with group_by=<category>
+5. "show/find rows where..." → filter_rows with mode='view' (default - does NOT change the data). Use mode='permanent' ONLY when the user explicitly says delete/remove/keep only those rows.
+6. "top N by X" or "who has the highest/lowest X" → sort_data with column=X, limit=N (view only, answer from the returned records)
+7. "add/create/compute a new column" → add_column; "rename column" → rename_column
+8. "undo/revert/reset/start over" → reset_dataset
+9. "show duplicates" → show_duplicates (inspect only); "remove duplicates" → clean_data with action='remove_duplicates'
+10. "remove/delete column X" → remove_columns; missing values → clean_data action='handle_missing'; outliers → clean_data action='remove_outliers'
+11. "analyze/explore/audit/summarize the whole dataset" → run_full_analysis
+12. For factual questions about specific values (max, min, who, which) → use sort_data or get_statistics instead of reading the preview - the preview may be truncated
+13. After ANY operation confirm what you did with the results. NEVER say "you can do X" or "try doing Y" - JUST DO IT
 """
         except Exception as e:
             dataset_context = f"User message: {message}\n\nNote: No dataset loaded. Suggest uploading a dataset first."

@@ -4,6 +4,75 @@ All notable changes to DataLix AI are documented in this file.
 
 ---
 
+# DataLix AI v4.1.0 — "See, Don't Destroy"
+
+**Release Date:** July 26, 2026
+**Status:** Production Ready
+
+The theme of this release: **the AI's data vocabulary grew up, and it stopped destroying data by accident.** Charts now aggregate correctly, "show me" requests no longer mutate your dataset, every change is undoable, and the session sidebar actually works.
+
+---
+
+## 🚀 Major Features
+
+### 1. 📊 Aggregation-Aware Charts — FIXES THE CORE CHART BUG
+
+Asking "create a bar chart for the number of students in each department" previously plotted `Student_ID` values per department — meaningless, because the tool had no concept of aggregation. The model just picked the first numeric column for the Y-axis.
+
+**Now:**
+- `create_visualization` accepts `aggregation` (count / sum / mean / median / min / max)
+- A bar chart with a categorical X and no Y **auto-counts rows per category**
+- An **ID-column guard**: if the model picks an ID-like column (ends in `_id`, ~unique) as Y with no aggregation, it's auto-converted to a count chart
+- `get_statistics` gained `group_by` for "compare groups" / "average X per Y" questions
+
+**Result:** "number of students in each department" plots counts (10/10). "average marks by department" plots real means.
+
+### 2. 🛡️ Non-Destructive Filters + Undo
+
+`filter_rows` previously **permanently deleted** all non-matching rows — and since persistence now works, that deletion was saved to Supabase too. "Show me students with marks > 90" silently destroyed data.
+
+**Now:**
+- Default mode is `view` — shows matching rows **without changing the dataset**
+- `permanent` mode only when the user explicitly wants to keep/delete rows
+- Multi-condition filters with AND/OR
+- New `reset_dataset` tool: snapshots the original upload (gzip) and restores it on "undo / revert / reset / start over"
+
+### 3. 🔢 Top-N & Sorting
+
+New `sort_data` tool with a `limit` parameter. "Top 5 students by marks" or "who has the highest attendance" is now answered from the **actual data** (returned as records the model summarizes), not hallucinated from a truncated preview. View-only — doesn't reorder the dataset unless asked.
+
+### 4. 🧮 Derived & Renamed Columns
+
+- `add_column`: create a new column from a safe arithmetic formula over existing columns (e.g. `Total = Price * Quantity`). Uses `df.eval` — arithmetic only, so injection attempts (`__import__("os")...`) are rejected.
+- `rename_column`: rename any column.
+
+### 5. 🔍 Inspection-Only Duplicates & Date Filtering
+
+- `show_duplicates`: shows duplicated rows **without removing them** (the destructive path is still `clean_data` → `remove_duplicates`)
+- `filter_rows` now coerces datetime columns properly, so "rows after 2024-03-01" works on date columns (previously fell back to string comparison)
+
+### 6. 🤝 Unified Tool Schema + Groq Parity
+
+Tool schemas are now a **single source of truth** — one `TOOLS` list generates both Groq's OpenAI-style schemas and Gemini's `glm` declarations, so the two providers can never drift again. Groq also gained `get_correlation` and `ml_analysis`, which were Gemini-only before. Both system prompts were rewritten with explicit tool-usage guidance (use `count` aggregation, never use an ID as Y, view-vs-permanent, top-N, undo).
+
+---
+
+## 🐛 Bug Fixes
+
+- ✅ **Session sidebar crash** (deployed v4.0.0): `SessionSidebar` read `session.updatedAt`, but the backend only sent `createdAt` — `formatDate(undefined).getTime()` crashed the app via the ErrorBoundary the moment a user with sessions logged in. Fixed by hardening the date formatter (handles undefined/invalid) and aligning the backend's session response to the frontend's `Session` shape (`id`, `name`, `createdAt`, `updatedAt`).
+- ✅ **Silent session-sidebar breakage** the crash was masking: sessions were unselectable (`session.id` was undefined) and all showed "Untitled Session" (`session.name` was undefined). Both fixed by the response-shape alignment.
+- ✅ Added the two missing session endpoints the frontend calls: `PATCH /sessions/{id}/name` (auto-naming after first chat message now works) and `GET /sessions/{id}/messages` (returns `[]` until chat-history persistence lands — stops session-switch from 404ing).
+
+---
+
+## ⚠️ Notes
+
+- Chat history is still memory-only — `GET /sessions/{id}/messages` returns `[]`. Persisting to the `messages` table is the lead item for v4.2.
+- The full tool expansion (14/14 unit tests, 6/6 live Groq tests) and session-sidebar fix (live-verified: list/rename/messages) are both covered by the regression suite (11/11 pass).
+
+---
+---
+
 # DataLix AI v4.0.0 — "Actions, Not Answers"
 
 **Release Date:** July 20, 2026

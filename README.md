@@ -6,7 +6,7 @@
 
 **Transform Data into Insights Through Natural Conversation**
 
-[![Version](https://img.shields.io/badge/version-4.0.0-blue.svg)](https://github.com/HimanshuSingh-966/DataLix-AI/releases)
+[![Version](https://img.shields.io/badge/version-4.1.0-blue.svg)](https://github.com/HimanshuSingh-966/DataLix-AI/releases)
 [![Better Stack Badge](https://uptime.betterstack.com/status-badges/v1/monitor/2srpm.svg)](https://uptime.betterstack.com/?utm_source=status_badge)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
@@ -93,7 +93,12 @@ DataLix: *creates line chart* "Revenue has increased 23% quarter-over-quarter...
 **Features:**
 - 🧠 Context-aware conversations with memory
 - 🔄 Multi-turn dialogue support
-- 🤖 Dual AI provider support (Gemini & Groq) — both with **native tool calling**: the AI actually executes operations (remove columns, filter rows, clean data, build charts) instead of describing them
+- 🤖 Dual AI provider support (Gemini & Groq) — both with **native tool calling**: the AI actually executes operations instead of describing them
+- 📊 **Aggregation-aware charts** — "how many rows per category" plots counts (not raw IDs); "average/total X by Y" uses real grouping
+- 🛡️ **Non-destructive by default** — "show me rows where…" previews matches without changing your data; mutations only when you explicitly ask
+- ↩️ **Undo any change** — "reset the dataset" restores the original upload
+- 🔢 **Top-N & sorting** — "top 5 by marks" / "who has the highest X" answered from the actual data
+- 🧮 **Derived & renamed columns** — safe arithmetic formulas (`Price * Quantity`) and column renames
 - 💡 Intelligent suggested next actions
 - 🎯 Automatic query optimization
 
@@ -738,8 +743,17 @@ npm run format
 - [x] 💾 Dataset persistence & session restore across restarts
 - [x] 🔐 Security hardening (ownership checks, rate limiting, upload validation)
 
-### 🚀 Version 4.1 (Planned)
-- [ ] 💬 Persist chat history to database
+### ✅ Version 4.1 (Released — July 2026)
+- [x] 📊 Chart aggregation (count/sum/mean/median/min/max) — fixes "number of rows per category" charts
+- [x] 🛡️ Non-destructive filters — "show me..." views data without mutating; `reset_dataset` undoes any change
+- [x] 🔢 Top-N & sorting — "top 5 by marks" / "who has the highest X" answered from real data
+- [x] 🧮 Derived & renamed columns — safe arithmetic formulas, column rename
+- [x] 🔍 Inspect-only duplicates view, datetime-aware filtering
+- [x] 🤝 Unified tool schemas across providers (Groq now has correlation + ML)
+- [x] 🗂️ Working session sidebar (select/rename/delete) — fixed field-mismatch crash
+
+### 🚀 Version 4.2 (Planned)
+- [ ] 💬 Persist chat history to database (the `messages` endpoint currently returns empty)
 - [ ] 🔄 Real-time collaboration
 - [ ] 📊 Advanced statistical tests
 - [ ] 🎨 Custom chart themes

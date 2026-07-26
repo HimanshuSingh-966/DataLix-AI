@@ -17,8 +17,35 @@ def create_visualization(
     title = params.get('title', f'{chart_type.title()} Chart')
     color_by = params.get('colorBy')
     z_column = params.get('zColumn')
-    
+
+    aggregation = str(params.get('aggregation') or '').lower().strip() or None
+    if aggregation == 'avg':
+        aggregation = 'mean'
+
+    def _looks_like_id(col: Optional[str]) -> bool:
+        if not col or col not in df.columns:
+            return False
+        name = col.lower()
+        return (name == 'id' or name.endswith('_id') or name.endswith('id')) and df[col].nunique() >= len(df) * 0.95
+
     try:
+        # Pre-aggregate for category charts. Handles "count of rows per category"
+        # and "sum/mean of y per x" — and guards against meaningless y axes like
+        # ID columns (summing Student_ID per department is never what users want).
+        if chart_type in ('bar', 'line', 'pie') and x_column and x_column in df.columns:
+            wants_count = (
+                aggregation == 'count'
+                or (chart_type == 'bar' and not y_column)
+                or (chart_type == 'bar' and aggregation is None and _looks_like_id(y_column))
+            )
+            if wants_count:
+                counted = df[x_column].value_counts().head(50).reset_index()
+                counted.columns = [x_column, 'Count']
+                df = counted
+                y_column = 'Count'
+            elif aggregation in ('sum', 'mean', 'median', 'min', 'max') and y_column and y_column in df.columns:
+                df = df.groupby(x_column, dropna=False)[y_column].agg(aggregation).reset_index()
+                df = df.sort_values(y_column, ascending=False).head(50)
         if chart_type == 'histogram':
             if not x_column:
                 raise ValueError("x_column required for histogram")
@@ -78,8 +105,12 @@ def create_visualization(
         elif chart_type == 'pie':
             if not x_column:
                 raise ValueError("x_column required for pie chart")
-            value_counts = df[x_column].value_counts().head(10)
-            fig = px.pie(values=value_counts.values, names=value_counts.index, title=title)
+            if y_column and y_column in df.columns:
+                # pre-aggregated above (or explicit values column)
+                fig = px.pie(df.head(10), values=y_column, names=x_column, title=title)
+            else:
+                value_counts = df[x_column].value_counts().head(10)
+                fig = px.pie(values=value_counts.values, names=value_counts.index, title=title)
         
         elif chart_type == 'donut':
             if not x_column:

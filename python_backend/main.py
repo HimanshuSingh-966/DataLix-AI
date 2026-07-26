@@ -26,7 +26,7 @@ IS_PRODUCTION = os.getenv("NODE_ENV", "").lower() == "production"
 # Hide interactive API docs and the OpenAPI schema in production
 app = FastAPI(
     title="DataLix AI API",
-    version="4.0.0",
+    version="4.1.0",
     docs_url=None if IS_PRODUCTION else "/docs",
     redoc_url=None if IS_PRODUCTION else "/redoc",
     openapi_url=None if IS_PRODUCTION else "/openapi.json",
@@ -176,7 +176,7 @@ def require_session_owner(session_id: str, user: Dict):
 
 @app.get("/")
 async def root():
-    return {"message": "DataLix AI API", "version": "4.0.0", "status": "running"}
+    return {"message": "DataLix AI API", "version": "4.1.0", "status": "running"}
 
 @app.get("/health")
 async def health_check():
@@ -403,6 +403,38 @@ async def delete_session(
     try:
         data_processor.delete_session(session_id)
         return {"message": "Session deleted successfully"}
+    except Exception as e:
+        raise safe_error(e)
+
+class RenameSessionRequest(BaseModel):
+    name: str
+
+@app.patch("/sessions/{session_id}/name")
+async def rename_session(
+    session_id: str,
+    request: RenameSessionRequest,
+    user: Dict = Depends(get_current_user)
+):
+    """Rename a data session"""
+    require_session_owner(session_id, user)
+    try:
+        if not request.name or not request.name.strip():
+            raise HTTPException(status_code=400, detail="Session name is required")
+        return data_processor.rename_session(session_id, request.name.strip()[:100])
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise safe_error(e)
+
+@app.get("/sessions/{session_id}/messages")
+async def get_session_messages(
+    session_id: str,
+    user: Dict = Depends(get_current_user)
+):
+    """Get chat messages for a session (empty until chat-history persistence lands)"""
+    require_session_owner(session_id, user)
+    try:
+        return data_processor.get_session_messages(session_id)
     except Exception as e:
         raise safe_error(e)
 
