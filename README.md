@@ -814,7 +814,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 Built with ❤️ using these amazing tools:
 
-- **[Replit](https://replit.com)** - Development environment
 - **[Shadcn UI](https://ui.shadcn.com)** - Beautiful components
 - **[Plotly](https://plotly.com)** - Interactive charts
 - **[Supabase](https://supabase.com)** - Backend infrastructure
